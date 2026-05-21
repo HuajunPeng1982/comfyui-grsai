@@ -35,7 +35,6 @@ const SIZE_MAP = {
     },
 };
 
-// All ratios for each model
 const RATIOS_BY_MODEL = {
     "gpt-image-2-vip": Object.keys(SIZE_MAP["gpt-image-2-vip"]),
     "gpt-image-2": Object.keys(SIZE_MAP["gpt-image-2"]),
@@ -43,50 +42,65 @@ const RATIOS_BY_MODEL = {
 
 app.registerExtension({
     name: "comfyui-grsai.dynamic",
-    async nodeCreated(node) {
-        if (node.comfyClass !== "GrsaiImageGenerate") return;
+    async beforeRegisterNodeDef(nodeType, nodeData, app) {
+        if (nodeData.name !== "GrsaiImageGenerate") return;
 
-        const modelWidget = node.widgets.find((w) => w.name === "model");
-        const ratioWidget = node.widgets.find((w) => w.name === "aspect_ratio");
-        const sizeWidget = node.widgets.find((w) => w.name === "image_size");
+        const onNodeCreated = nodeType.prototype.onNodeCreated;
+        nodeType.prototype.onNodeCreated = function () {
+            const result = onNodeCreated
+                ? onNodeCreated.apply(this, arguments)
+                : undefined;
 
-        if (!modelWidget || !ratioWidget || !sizeWidget) return;
+            const modelWidget = this.widgets.find((w) => w.name === "model");
+            const ratioWidget = this.widgets.find((w) => w.name === "aspect_ratio");
+            const sizeWidget = this.widgets.find((w) => w.name === "image_size");
 
-        const updateSizes = () => {
-            const model = modelWidget.value;
-            const ratio = ratioWidget.value;
-            const sizes = SIZE_MAP[model]?.[ratio] || ["1024x1024"];
-            sizeWidget.options.values = sizes;
-            if (!sizes.includes(sizeWidget.value)) {
-                sizeWidget.value = sizes[0];
+            if (!modelWidget || !ratioWidget || !sizeWidget) return result;
+
+            function setComboValues(widget, values) {
+                // Mutate array in place for LiteGraph compatibility
+                widget.options.values.length = 0;
+                for (const v of values) {
+                    widget.options.values.push(v);
+                }
+                if (!values.includes(widget.value)) {
+                    widget.value = values[0];
+                }
             }
-            sizeWidget.options.values = sizes;
-            node.setDirtyCanvas(true, true);
-        };
 
-        const updateRatios = () => {
-            const model = modelWidget.value;
-            const ratios = RATIOS_BY_MODEL[model] || Object.keys(SIZE_MAP["gpt-image-2"]);
-            ratioWidget.options.values = ratios;
-            if (!ratios.includes(ratioWidget.value)) {
-                ratioWidget.value = ratios[0];
-            }
-            ratioWidget.options.values = ratios;
-            // After changing ratios, also update sizes
-            updateSizes();
-        };
+            const updateSizes = () => {
+                const model = modelWidget.value;
+                const ratio = ratioWidget.value;
+                const sizes = SIZE_MAP[model]?.[ratio] || ["1024x1024"];
+                setComboValues(sizeWidget, sizes);
+            };
 
-        // Save original callbacks and chain them
-        const origModelCb = modelWidget.callback;
-        modelWidget.callback = function (val) {
-            if (origModelCb) origModelCb.call(this, val);
+            const updateRatios = () => {
+                const model = modelWidget.value;
+                const ratios = RATIOS_BY_MODEL[model] || Object.keys(SIZE_MAP["gpt-image-2"]);
+                setComboValues(ratioWidget, ratios);
+                updateSizes();
+            };
+
+            const self = this;
+            const origModelCb = modelWidget.callback;
+            modelWidget.callback = function (...args) {
+                if (origModelCb) origModelCb.apply(this, args);
+                updateRatios();
+                self.setDirtyCanvas(true, true);
+            };
+
+            const origRatioCb = ratioWidget.callback;
+            ratioWidget.callback = function (...args) {
+                if (origRatioCb) origRatioCb.apply(this, args);
+                updateSizes();
+                self.setDirtyCanvas(true, true);
+            };
+
+            // Apply initial filtering based on default values
             updateRatios();
-        };
 
-        const origRatioCb = ratioWidget.callback;
-        ratioWidget.callback = function (val) {
-            if (origRatioCb) origRatioCb.call(this, val);
-            updateSizes();
+            return result;
         };
     },
 });
