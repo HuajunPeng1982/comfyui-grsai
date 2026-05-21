@@ -7,6 +7,10 @@ from PIL import Image
 import requests
 import torch
 
+# Use a session that ignores system proxy settings
+_http = requests.Session()
+_http.trust_env = False
+
 # Aspect ratio -> image size mapping per model
 VIP_SIZES = {
     "1:1": ["1024x1024", "2048x2048", "2880x2880"],
@@ -62,7 +66,7 @@ def tensor_to_base64(img_tensor):
 
 def url_to_tensor(url, timeout=60):
     """Download an image from URL and convert to ComfyUI tensor [1, H, W, C] float32."""
-    resp = requests.get(url, timeout=timeout)
+    resp = _http.get(url, timeout=timeout)
     resp.raise_for_status()
     pil_img = Image.open(io.BytesIO(resp.content)).convert("RGB")
     img_np = np.array(pil_img).astype(np.float32) / 255.0
@@ -146,7 +150,7 @@ class GrsaiImageGenerate:
         last_error = None
         for attempt in range(retry_count + 1):
             try:
-                resp = requests.post(url, headers=headers, json=body, timeout=300)
+                resp = _http.post(url, headers=headers, json=body, timeout=300)
                 if resp.status_code == 400:
                     err_detail = resp.text
                     raise RuntimeError(f"API 400 error: {err_detail}")
@@ -176,7 +180,7 @@ class GrsaiImageGenerate:
             if time.time() >= deadline:
                 break
             try:
-                resp = requests.get(query_url, headers=headers, timeout=30)
+                resp = _http.get(query_url, headers=headers, timeout=30)
                 resp.raise_for_status()
                 data = resp.json()
                 status = data.get("status", "")
