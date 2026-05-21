@@ -94,6 +94,9 @@ class GrsaiImageGenerate:
                 "model": (["gpt-image-2", "gpt-image-2-vip"], {
                     "default": "gpt-image-2",
                 }),
+                "api_key_preset": (["gpt-image-2-vip (内置)", "gpt-image-2 (内置)", "其它"], {
+                    "default": "gpt-image-2 (内置)",
+                }),
                 "api_key": ("STRING", {
                     "multiline": False,
                     "default": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
@@ -217,8 +220,8 @@ class GrsaiImageGenerate:
             f"Async generation timed out after {timeout}s. task_id={task_id}"
         )
 
-    def generate(self, prompt, model, api_key, base_url, aspect_ratio, image_size,
-                 reply_type, timeout, retry_count, **kwargs):
+    def generate(self, prompt, model, api_key_preset, api_key, base_url, aspect_ratio,
+                 image_size, reply_type, timeout, retry_count, **kwargs):
         images = self._collect_images(kwargs)
 
         body = {

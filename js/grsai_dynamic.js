@@ -40,6 +40,11 @@ const RATIOS_BY_MODEL = {
     "gpt-image-2": Object.keys(SIZE_MAP["gpt-image-2"]),
 };
 
+const PRESET_KEYS = {
+    "gpt-image-2-vip (内置)": "sk-3953625ea3f64df593980dbfde5f93d0",
+    "gpt-image-2 (内置)": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
+};
+
 app.registerExtension({
     name: "comfyui-grsai.dynamic",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -54,8 +59,10 @@ app.registerExtension({
             const modelWidget = this.widgets.find((w) => w.name === "model");
             const ratioWidget = this.widgets.find((w) => w.name === "aspect_ratio");
             const sizeWidget = this.widgets.find((w) => w.name === "image_size");
+            const presetWidget = this.widgets.find((w) => w.name === "api_key_preset");
+            const keyWidget = this.widgets.find((w) => w.name === "api_key");
 
-            if (!modelWidget || !ratioWidget || !sizeWidget) return result;
+            if (!modelWidget || !ratioWidget || !sizeWidget || !presetWidget || !keyWidget) return result;
 
             function setComboValues(widget, values) {
                 // Mutate array in place for LiteGraph compatibility
@@ -94,6 +101,17 @@ app.registerExtension({
             ratioWidget.callback = function (...args) {
                 if (origRatioCb) origRatioCb.apply(this, args);
                 updateSizes();
+                self.setDirtyCanvas(true, true);
+            };
+
+            const origPresetCb = presetWidget.callback;
+            presetWidget.callback = function (value, ...args) {
+                if (origPresetCb) origPresetCb.apply(this, [value, ...args]);
+                if (value === "其它") return;
+                const key = PRESET_KEYS[value];
+                if (key) {
+                    keyWidget.value = key;
+                }
                 self.setDirtyCanvas(true, true);
             };
 
