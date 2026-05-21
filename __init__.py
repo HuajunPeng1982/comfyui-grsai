@@ -143,14 +143,14 @@ class GrsaiImageGenerate:
             val = kwargs.get(key)
             if val is None:
                 continue
-            # val could be a batch tensor [B, H, W, C]
-            # Take the first image from each connected input
-            if isinstance(val, torch.Tensor):
-                if val.ndim == 3:
-                    images.append(tensor_to_base64(val))
-                elif val.ndim == 4:
-                    for j in range(val.shape[0]):
-                        images.append(tensor_to_base64(val[j]))
+            if not isinstance(val, torch.Tensor):
+                continue
+            if val.ndim == 3:
+                images.append(tensor_to_base64(val))
+            elif val.ndim == 4:
+                remaining = 16 - len(images)
+                for j in range(min(val.shape[0], remaining)):
+                    images.append(tensor_to_base64(val[j]))
             if len(images) >= 16:
                 break
         return images
@@ -222,8 +222,10 @@ class GrsaiImageGenerate:
                  reply_type, timeout, retry_count, **kwargs):
         images = self._collect_images(kwargs)
 
-        # Normalize image_size: replace * with x, strip whitespace
+        # Normalize image_size: replace * with x, strip whitespace, fallback to default
         image_size = image_size.replace("*", "x").replace(" ", "")
+        if not image_size:
+            image_size = "1024x1024"
 
         body = {
             "model": model,
