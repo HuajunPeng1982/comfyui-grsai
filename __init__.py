@@ -11,12 +11,6 @@ import torch
 _http = requests.Session()
 _http.trust_env = False
 
-# Preset API key mapping
-KEY_MAP = {
-    "gpt-image-2-vip": "sk-3953625ea3f64df593980dbfde5f93d0",
-    "gpt-image-2": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
-}
-
 # Aspect ratio -> image size mapping per model
 VIP_SIZES = {
     "1:1": ["1024x1024", "2048x2048", "2880x2880"],
@@ -100,12 +94,9 @@ class GrsaiImageGenerate:
                 "model": (["gpt-image-2", "gpt-image-2-vip"], {
                     "default": "gpt-image-2",
                 }),
-                "api_key": (["gpt-image-2", "gpt-image-2-vip", "custom"], {
-                    "default": "gpt-image-2",
-                }),
-                "api_key_custom": ("STRING", {
+                "api_key": ("STRING", {
                     "multiline": False,
-                    "default": "",
+                    "default": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
                 }),
                 "base_url": ("STRING", {
                     "multiline": False,
@@ -114,7 +105,8 @@ class GrsaiImageGenerate:
                 "aspect_ratio": (VIP_RATIOS, {
                     "default": "1:1",
                 }),
-                "image_size": (ALL_SIZES, {
+                "image_size": ("STRING", {
+                    "multiline": False,
                     "default": "1024x1024",
                 }),
                 "reply_type": (["json", "async"], {
@@ -226,19 +218,12 @@ class GrsaiImageGenerate:
             f"Async generation timed out after {timeout}s. task_id={task_id}"
         )
 
-    def generate(self, prompt, model, api_key, api_key_custom, base_url,
-                 aspect_ratio, image_size, reply_type, timeout, retry_count,
-                 **kwargs):
-        # Resolve actual API key
-        if api_key == "custom":
-            actual_key = api_key_custom
-        else:
-            actual_key = KEY_MAP.get(api_key, api_key)
-
-        if not actual_key:
-            raise RuntimeError("API key is required")
-
+    def generate(self, prompt, model, api_key, base_url, aspect_ratio, image_size,
+                 reply_type, timeout, retry_count, **kwargs):
         images = self._collect_images(kwargs)
+
+        # Normalize image_size: replace * with x, strip whitespace
+        image_size = image_size.replace("*", "x").replace(" ", "")
 
         body = {
             "model": model,
@@ -249,7 +234,7 @@ class GrsaiImageGenerate:
         }
 
         headers = {
-            "Authorization": f"Bearer {actual_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
