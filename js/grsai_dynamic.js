@@ -35,98 +35,70 @@ const SIZE_MAP = {
     },
 };
 
-const RATIOS_BY_MODEL = {
-    "gpt-image-2-vip": Object.keys(SIZE_MAP["gpt-image-2-vip"]),
-    "gpt-image-2": Object.keys(SIZE_MAP["gpt-image-2"]),
-};
-
-const PRESET_KEYS = {
-    "gpt-image-2-vip (内置)": "sk-3953625ea3f64df593980dbfde5f93d0",
-    "gpt-image-2 (内置)": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
-};
-
-function setComboValues(widget, values) {
-    widget.options.values.length = 0;
-    for (const v of values) {
-        widget.options.values.push(v);
-    }
-    if (!values.includes(widget.value)) {
-        widget.value = values[0];
-    }
+const RATIOS_BY_MODEL = {};
+for (const [model, sizes] of Object.entries(SIZE_MAP)) {
+    RATIOS_BY_MODEL[model] = Object.keys(sizes);
 }
 
-function setupNode(node) {
-    if (node.comfyClass !== "GrsaiImageGenerate") return;
-
-    const modelW = node.widgets.find((w) => w.name === "model");
-    const ratioW = node.widgets.find((w) => w.name === "aspect_ratio");
-    const sizeW = node.widgets.find((w) => w.name === "image_size");
-    const presetW = node.widgets.find((w) => w.name === "api_key_preset");
-    const keyW = node.widgets.find((w) => w.name === "api_key");
-
-    if (!modelW || !ratioW || !sizeW || !presetW || !keyW) return;
-
-    function updateSizes() {
-        const model = modelW.value;
-        const ratio = ratioW.value;
-        const sizes = SIZE_MAP[model]?.[ratio] || ["1024x1024"];
-        setComboValues(sizeW, sizes);
-    }
-
-    function updateRatios() {
-        const model = modelW.value;
-        const ratios = RATIOS_BY_MODEL[model] || Object.keys(SIZE_MAP["gpt-image-2"]);
-        setComboValues(ratioW, ratios);
-        updateSizes();
-    }
-
-    function updateKey() {
-        const preset = presetW.value;
-        if (preset === "其它") return;
-        const key = PRESET_KEYS[preset];
-        if (key && keyW.value !== key) {
-            keyW.value = key;
-        }
-    }
-
-    // Hook model changes → update ratios + sizes
-    const origModelCb = modelW.callback;
-    modelW.callback = function (v, ...args) {
-        if (origModelCb) origModelCb.call(this, v, ...args);
-        updateRatios();
-        node.setDirtyCanvas(true, true);
-    };
-
-    // Hook ratio changes → update sizes
-    const origRatioCb = ratioW.callback;
-    ratioW.callback = function (v, ...args) {
-        if (origRatioCb) origRatioCb.call(this, v, ...args);
-        updateSizes();
-        node.setDirtyCanvas(true, true);
-    };
-
-    // Hook preset changes → update key
-    const origPresetCb = presetW.callback;
-    presetW.callback = function (v, ...args) {
-        if (origPresetCb) origPresetCb.call(this, v, ...args);
-        updateKey();
-        node.setDirtyCanvas(true, true);
-    };
-
-    // Apply initial filtering
-    updateRatios();
-    updateKey();
-}
-
-// Register via beforeRegisterNodeDef (ComfyUI standard hook)
 app.registerExtension({
     name: "comfyui-grsai.dynamic",
-    beforeRegisterNodeDef(nodeType, nodeData) {
+    async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "GrsaiImageGenerate") return;
-        const orig = nodeType.prototype.onNodeCreated;
+
+        const origOnNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
-            const r = orig ? orig.apply(this, arguments) : undefined;
-            setupNode(this);
+            const r = origOnNodeCreated?.apply(this, arguments);
+
+            const modelWidget = this.widgets.find((w) => w.name === "model");
+            const ratioWidget = this.widgets.find((w) => w.name === "aspect_ratio");
+            const sizeWidget = this.widgets.find((w) => w.name === "image_size");
+
+            if (!modelWidget || !ratioWidget || !sizeWidget) return r;
+
+            // Ensure initial values are consistent
+            const initModel = modelWidget.value || "gpt-image-2";
+            const initRatios = RATIOS_BY_MODEL[initModel] || [];
+            if (!initRatios.includes(ratioWidget.value)) {
+                ratioWidget.value = initRatios[0];
+            }
+            const initSizes = SIZE_MAP[initModel]?.[ratioWidget.value] || [];
+            if (!initSizes.includes(sizeWidget.value)) {
+                sizeWidget.value = initSizes[0];
+            }
+
+            const updateSizes = () => {
+                const model = modelWidget.value;
+                const ratio = ratioWidget.value;
+                const sizes = SIZE_MAP[model]?.[ratio] || [];
+                if (sizes.length === 0) return;
+                sizeWidget.options.values = sizes;
+                if (!sizes.includes(sizeWidget.value)) {
+                    sizeWidget.value = sizes[0];
+                }
+                this.setDirtyCanvas(true, true);
+            };
+
+            const updateRatios = () => {
+                const model = modelWidget.value;
+                const ratios = RATIOS_BY_MODEL[model] || [];
+                if (ratios.length === 0) return;
+                const oldRatio = ratioWidget.value;
+                ratioWidget.options.values = ratios;
+                if (!ratios.includes(oldRatio)) {
+                    ratioWidget.value = ratios[0];
+                }
+                updateSizes();
+                this.setDirtyCanvas(true, true);
+            };
+
+            modelWidget.callback = function (val) {
+                updateRatios();
+            };
+
+            ratioWidget.callback = function (val) {
+                updateSizes();
+            };
+
             return r;
         };
     },
