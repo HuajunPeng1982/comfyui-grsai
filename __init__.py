@@ -66,11 +66,19 @@ def tensor_to_base64(img_tensor):
 
 def url_to_tensor(url, timeout=60):
     """Download an image from URL and convert to ComfyUI tensor [1, H, W, C] float32."""
-    resp = _http.get(url, timeout=timeout)
-    resp.raise_for_status()
-    pil_img = Image.open(io.BytesIO(resp.content)).convert("RGB")
-    img_np = np.array(pil_img).astype(np.float32) / 255.0
-    return torch.from_numpy(img_np).unsqueeze(0)
+    last_error = None
+    for i in range(3):
+        try:
+            resp = _http.get(url, timeout=timeout)
+            resp.raise_for_status()
+            pil_img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+            img_np = np.array(pil_img).astype(np.float32) / 255.0
+            return torch.from_numpy(img_np).unsqueeze(0)
+        except Exception as e:
+            last_error = e
+            if i < 2:
+                time.sleep(2 * (i + 1))
+    raise RuntimeError(f"Failed to download image after 3 attempts") from last_error
 
 
 class GrsaiImageGenerate:
@@ -169,12 +177,15 @@ class GrsaiImageGenerate:
                 last_error = e
                 if attempt < retry_count:
                     time.sleep(2 * (attempt + 1))
-        raise RuntimeError(f"Request failed after {retry_count + 1} attempts: {last_error}")
+        raise RuntimeError(
+            f"Request failed after {retry_count + 1} attempts"
+        ) from last_error
 
     def _poll_async(self, base_url, headers, task_id, timeout):
         query_url = f"{base_url.rstrip('/')}/result?id={task_id}"
         deadline = time.time() + timeout
         interval = 2
+        consecutive_errors = 0
         while time.time() < deadline:
             time.sleep(min(interval, deadline - time.time()))
             if time.time() >= deadline:
@@ -191,11 +202,17 @@ class GrsaiImageGenerate:
                 if status == "failed":
                     err = data.get("error", "Unknown error")
                     raise RuntimeError(f"Generation failed: {err}")
+                consecutive_errors = 0
                 interval = min(interval + 1, 10)
             except RuntimeError:
                 raise
             except Exception as e:
-                raise RuntimeError(f"Polling error: {e}")
+                consecutive_errors += 1
+                if consecutive_errors >= 5:
+                    raise RuntimeError(
+                        f"Polling failed after {consecutive_errors} consecutive errors"
+                    ) from e
+                interval = min(interval + 2, 15)
         raise TimeoutError(
             f"Async generation timed out after {timeout}s. task_id={task_id}"
         )
