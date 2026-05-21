@@ -182,7 +182,7 @@ class GrsaiImageGenerate:
         ) from last_error
 
     def _poll_async(self, base_url, headers, task_id, timeout):
-        query_url = f"{base_url.rstrip('/')}/result?id={task_id}"
+        query_url = f"{base_url.rstrip('/')}/v1/api/result?id={task_id}"
         deadline = time.time() + timeout
         interval = 2
         consecutive_errors = 0
