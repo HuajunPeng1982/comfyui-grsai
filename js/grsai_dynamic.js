@@ -115,8 +115,10 @@ app.registerExtension({
                 self.setDirtyCanvas(true, true);
             };
 
-            // Apply initial filtering based on default values
+            // Apply initial state based on default values
             updateRatios();
+            const initKey = PRESET_KEYS[presetWidget.value];
+            if (initKey) keyWidget.value = initKey;
 
             return result;
         };

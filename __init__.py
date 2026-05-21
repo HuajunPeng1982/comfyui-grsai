@@ -46,6 +46,12 @@ STANDARD_SIZES = {
     "2:1": ["1792x896"],
 }
 
+# API key mapping for presets
+PRESET_KEYS = {
+    "gpt-image-2-vip (内置)": "sk-3953625ea3f64df593980dbfde5f93d0",
+    "gpt-image-2 (内置)": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
+}
+
 # gpt-image-2 has no 1:3 or 3:1
 STANDARD_RATIOS = [k for k in STANDARD_SIZES.keys()]
 VIP_RATIOS = [k for k in VIP_SIZES.keys()]
@@ -224,6 +230,9 @@ class GrsaiImageGenerate:
                  reply_type, timeout, retry_count, api_key_preset, **kwargs):
         images = self._collect_images(kwargs)
 
+        # Use preset key if a built-in option is selected, otherwise use user-typed key
+        actual_api_key = PRESET_KEYS.get(api_key_preset, api_key)
+
         body = {
             "model": model,
             "prompt": prompt,
@@ -233,7 +242,7 @@ class GrsaiImageGenerate:
         }
 
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {actual_api_key}",
             "Content-Type": "application/json",
         }
 
