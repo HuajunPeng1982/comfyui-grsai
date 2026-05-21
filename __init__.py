@@ -11,6 +11,12 @@ import torch
 _http = requests.Session()
 _http.trust_env = False
 
+# Preset API key mapping
+KEY_MAP = {
+    "gpt-image-2-vip": "sk-3953625ea3f64df593980dbfde5f93d0",
+    "gpt-image-2": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
+}
+
 # Aspect ratio -> image size mapping per model
 VIP_SIZES = {
     "1:1": ["1024x1024", "2048x2048", "2880x2880"],
@@ -44,12 +50,6 @@ STANDARD_SIZES = {
     "9:21": ["832x1920"],
     "1:2": ["896x1792"],
     "2:1": ["1792x896"],
-}
-
-# API key mapping for presets
-PRESET_KEYS = {
-    "gpt-image-2-vip (内置)": "sk-3953625ea3f64df593980dbfde5f93d0",
-    "gpt-image-2 (内置)": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
 }
 
 # gpt-image-2 has no 1:3 or 3:1
@@ -100,6 +100,13 @@ class GrsaiImageGenerate:
                 "model": (["gpt-image-2", "gpt-image-2-vip"], {
                     "default": "gpt-image-2",
                 }),
+                "api_key": (["gpt-image-2", "gpt-image-2-vip", "custom"], {
+                    "default": "gpt-image-2",
+                }),
+                "api_key_custom": ("STRING", {
+                    "multiline": False,
+                    "default": "",
+                }),
                 "base_url": ("STRING", {
                     "multiline": False,
                     "default": "https://grsai.dakka.com.cn",
@@ -124,13 +131,6 @@ class GrsaiImageGenerate:
                     "min": 0,
                     "max": 10,
                     "display": "number",
-                }),
-                "api_key_preset": (["gpt-image-2-vip (内置)", "gpt-image-2 (内置)", "其它"], {
-                    "default": "gpt-image-2 (内置)",
-                }),
-                "api_key": ("STRING", {
-                    "multiline": False,
-                    "default": "sk-3e09bb0bd5d541b2b6e9e683d08e74fd",
                 }),
             },
             "optional": {
@@ -226,12 +226,19 @@ class GrsaiImageGenerate:
             f"Async generation timed out after {timeout}s. task_id={task_id}"
         )
 
-    def generate(self, prompt, model, base_url, aspect_ratio, image_size,
-                 reply_type, timeout, retry_count, api_key_preset, api_key, **kwargs):
-        images = self._collect_images(kwargs)
+    def generate(self, prompt, model, api_key, api_key_custom, base_url,
+                 aspect_ratio, image_size, reply_type, timeout, retry_count,
+                 **kwargs):
+        # Resolve actual API key
+        if api_key == "custom":
+            actual_key = api_key_custom
+        else:
+            actual_key = KEY_MAP.get(api_key, api_key)
 
-        # Use preset key if a built-in option is selected, otherwise use user-typed key
-        actual_api_key = PRESET_KEYS.get(api_key_preset, api_key)
+        if not actual_key:
+            raise RuntimeError("API key is required")
+
+        images = self._collect_images(kwargs)
 
         body = {
             "model": model,
@@ -242,7 +249,7 @@ class GrsaiImageGenerate:
         }
 
         headers = {
-            "Authorization": f"Bearer {actual_api_key}",
+            "Authorization": f"Bearer {actual_key}",
             "Content-Type": "application/json",
         }
 
